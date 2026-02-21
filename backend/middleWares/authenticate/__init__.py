@@ -4,6 +4,7 @@ from django.conf import settings
 from rest_framework import status
 from api_services.logger import logger
 from django.contrib.auth import get_user_model
+from api_services.redis_service import RedisService
 
 User = get_user_model()
 
@@ -22,7 +23,7 @@ class UserAgentValidationMiddleware:
             token = self.extract_token(auth_header)
             if not token:
                 return JsonResponse(
-                    {"detail": "Invalid token format"},
+                    {"message": "Invalid token format"},
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
 
@@ -35,7 +36,6 @@ class UserAgentValidationMiddleware:
 
     # noinspection PyMethodMayBeStatic
     def extract_token(self, auth_header):
-        """Extract and validate JWT token from Authorization header"""
         try:
             if not auth_header.startswith("Bearer "):
                 return None
@@ -51,26 +51,15 @@ class UserAgentValidationMiddleware:
 
     # noinspection PyMethodMayBeStatic
     def validate_user_agent(self, token, request):
-        """Validate that token's user agent matches request's user agent"""
         try:
-            # Decode token without verification first to get claims
-            # This doesn't verify signature, just extracts payload
             unverified_payload = jwt.decode(token, options={"verify_signature": False})
-
             logger.info(f"unverified_payload: {unverified_payload}")
-
-            # Get user agent from token claims
             token_user_agent = unverified_payload.get("user_agent")
-
-            # Get current request user agent
             current_user_agent = request.META.get("HTTP_USER_AGENT", "")
-
-            # Log for debugging (optional)
             logger.info(
                 f"Token UA: {token_user_agent}, Request UA: {current_user_agent}"
             )
 
-            # If token has user_agent claim but it doesn't match
             if token_user_agent != current_user_agent:
                 logger.warning(
                     f"User agent mismatch! Token: {token_user_agent}, "
@@ -84,29 +73,38 @@ class UserAgentValidationMiddleware:
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
 
-            # Optional: Add decoded token to request for later use
             try:
-                # Now verify the token properly
                 validated_payload = jwt.decode(
                     token, settings.SECRET_KEY, algorithms=["HS256"]
                 )
                 request.jwt_payload = validated_payload
                 user_id = validated_payload.get("user_id")
+                jti = validated_payload.get("jti")
                 logger.info("user_id was used")
+
+                redis_service = RedisService()
+
+                has_been_blacklisted = redis_service.get(jti)
+                if has_been_blacklisted:
+                    return JsonResponse(
+                        {"message": "Token has been blacklisted"},
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
 
                 user = User.objects.get(id=user_id)
                 if not user.is_active:
                     return JsonResponse(
-                        {"detail": "User is not active"},
+                        {"message": "User is not active"},
                         status=status.HTTP_401_UNAUTHORIZED,
                     )
             except jwt.ExpiredSignatureError:
                 return JsonResponse(
-                    {"detail": "Token has expired"}, status=status.HTTP_401_UNAUTHORIZED
+                    {"message": "Token has expired"},
+                    status=status.HTTP_401_UNAUTHORIZED,
                 )
             except jwt.InvalidTokenError as e:
                 return JsonResponse(
-                    {"detail": f"Invalid token: {str(e)}"},
+                    {"message": f"Invalid token: {str(e)}"},
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
 
@@ -115,11 +113,11 @@ class UserAgentValidationMiddleware:
         except jwt.InvalidTokenError as e:
             logger.error(f"Invalid token during UA validation: {str(e)}")
             return JsonResponse(
-                {"detail": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED
+                {"message": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED
             )
         except Exception as e:
             logger.error(f"Unexpected error in user agent validation: {str(e)}")
             return JsonResponse(
-                {"detail": "Authentication error"},
+                {"message": "Authentication error"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
