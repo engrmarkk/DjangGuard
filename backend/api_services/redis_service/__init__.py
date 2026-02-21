@@ -1,5 +1,5 @@
 from redis import Redis
-from backend.api_services.environmentals import REDIS_HOST, REDIS_PORT, REDIS_DB
+from api_services.environmentals import REDIS_HOST, REDIS_PORT, REDIS_DB
 
 
 class RedisService:
