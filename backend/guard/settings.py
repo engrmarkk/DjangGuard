@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import timedelta
-from api_services.environmentals import CACHE_REDIS_URL
+from api_services.environmentals import SECRET_KEY, CACHE_REDIS_URL
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-p^@6l08-$cq4-*i8lg0c@&u+k$ykx9(0r!-&sbu2iwv8=$#cec"
+SECRET_KEY = SECRET_KEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
