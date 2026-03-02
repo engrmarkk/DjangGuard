@@ -2,7 +2,6 @@ from rest_framework.views import APIView
 from api_services.const_response import returned_response
 from .serializers import LoginSerializer, RegisterSerializer
 from rest_framework import status
-
 # noinspection PyUnresolvedReferences
 from api_services.utils import get_tokens_for_user, get_serializer_error
 from django_ratelimit.decorators import ratelimit
@@ -30,15 +29,17 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
+            redis_service = RedisService()
             user = serializer.validated_data.get("user")
             user_agent = serializer.validated_data.get("user_agent")
 
-            token_dict: dict = get_tokens_for_user(user, {"user_agent": user_agent})
+            token_dict: tuple = get_tokens_for_user(user, {"user_agent": user_agent})
             # returned_response(status_msg: str, message: str, status: int, data: dict|list = None)
             user.last_login = timezone.now()
             user.save()
+            redis_service.set(user.id, token_dict[1], expire=timedelta(days=1))
             return returned_response(
-                "success", "Login successful", status.HTTP_200_OK, token_dict
+                "success", "Login successful", status.HTTP_200_OK, token_dict[0]
             )
         return returned_response(
             "failed",
@@ -103,24 +104,7 @@ class LogoutView(APIView):
 
             # Extract jti
             jti = payload.get("jti")
-
-            if not jti:
-                return returned_response(
-                    "failed",
-                    "Token does not contain jti claim",
-                    status.HTTP_401_UNAUTHORIZED,
-                )
-
             redis_service = RedisService()
-
-            has_been_blacklisted = redis_service.get(jti)
-            if has_been_blacklisted:
-                return returned_response(
-                    "failed",
-                    "Token has been blacklisted",
-                    status.HTTP_401_UNAUTHORIZED,
-                )
-
             redis_service.set(jti, "blacklisted", expire=timedelta(days=1))
             return returned_response(
                 "success",
