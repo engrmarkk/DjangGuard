@@ -82,12 +82,26 @@ class UserAgentValidationMiddleware:
                 jti = validated_payload.get("jti")
                 logger.info("user_id was used")
 
+                if not jti:
+                    return JsonResponse(
+                        {"message": "Token does not contain jti claim"},
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+
                 redis_service = RedisService()
 
                 has_been_blacklisted = redis_service.get(jti)
+                # check if the value is "blacklisted"
                 if has_been_blacklisted:
+                    if has_been_blacklisted.decode("utf-8") == "blacklisted":
+                        return JsonResponse(
+                            {"message": "Token has been blacklisted"},
+                            status=status.HTTP_401_UNAUTHORIZED,
+                        )
+                is_accessible = redis_service.get(user_id)
+                if is_accessible and is_accessible.decode("utf-8") != jti:
                     return JsonResponse(
-                        {"message": "Token has been blacklisted"},
+                        {"message": "Invalid/Revoked Token"},
                         status=status.HTTP_401_UNAUTHORIZED,
                     )
 
