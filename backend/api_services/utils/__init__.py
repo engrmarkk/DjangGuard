@@ -17,7 +17,7 @@ def get_tokens_for_user(user, data):
         logger.info(f"create token: {key} - {value}")
         access[key] = value
 
-    return {"refresh": str(refresh), "access": str(access)}
+    return {"refresh": str(refresh), "access": str(access)}, access.payload.get("jti")
 
 
 # get first serializer error
