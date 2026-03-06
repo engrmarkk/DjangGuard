@@ -30,16 +30,16 @@ def track_and_alert_login(sender, request, user, **kwargs):
     )
 
     # if not is_known_ip:
-    #     # 1. Send Security Alert Email
+    #     # Send Security Alert Email
     #     send_mail(
     #         subject="Security Alert: New Login to your Account",
     #         message=f"Hi {user.username}, we detected a login from a new IP: {current_ip}.",
-    #         from_email="security@yourdomain.com",
+    #         from_email="",
     #         recipient_list=[user.email],
     #         fail_silently=False,
     #     )
 
-    # 2. Record this login
+    # Record this login
     UserLoginRecord.objects.create(
         user=user, ip_address=current_ip, user_agent=user_agent
     )
