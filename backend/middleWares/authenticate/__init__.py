@@ -5,6 +5,7 @@ from rest_framework import status
 from api_services.logger import logger
 from django.contrib.auth import get_user_model
 from api_services.redis_service import RedisService
+from datetime import timedelta
 
 User = get_user_model()
 
@@ -55,12 +56,28 @@ class UserAgentValidationMiddleware:
             unverified_payload = jwt.decode(token, options={"verify_signature": False})
             logger.info(f"unverified_payload: {unverified_payload}")
             token_user_agent = unverified_payload.get("user_agent")
+            unverified_jti = unverified_payload.get("jti")
             current_user_agent = request.META.get("HTTP_USER_AGENT", "")
             logger.info(
                 f"Token UA: {token_user_agent}, Request UA: {current_user_agent}"
             )
 
+            redis_service = RedisService()
+
+            has_been_blacklisted = redis_service.get(unverified_jti)
+            # check if the value is "blacklisted"
+            if has_been_blacklisted:
+                if has_been_blacklisted.decode("utf-8") == "blacklisted":
+                    return JsonResponse(
+                        {"message": "Token has been blacklisted"},
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+
             if token_user_agent != current_user_agent:
+                # blacklist the token
+                redis_service.set(
+                    unverified_jti, "blacklisted", expire=timedelta(days=1)
+                )
                 logger.warning(
                     f"User agent mismatch! Token: {token_user_agent}, "
                     f"Request: {current_user_agent}, Path: {request.path}"
@@ -87,17 +104,6 @@ class UserAgentValidationMiddleware:
                         {"message": "Token does not contain jti claim"},
                         status=status.HTTP_401_UNAUTHORIZED,
                     )
-
-                redis_service = RedisService()
-
-                has_been_blacklisted = redis_service.get(jti)
-                # check if the value is "blacklisted"
-                if has_been_blacklisted:
-                    if has_been_blacklisted.decode("utf-8") == "blacklisted":
-                        return JsonResponse(
-                            {"message": "Token has been blacklisted"},
-                            status=status.HTTP_401_UNAUTHORIZED,
-                        )
                 is_accessible = redis_service.get(user_id)
                 if is_accessible and is_accessible.decode("utf-8") != jti:
                     return JsonResponse(
