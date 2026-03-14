@@ -13,6 +13,7 @@ import jwt
 from api_services.environmentals import SECRET_KEY
 from api_services.redis_service import RedisService
 from datetime import timedelta
+from api_services.logger import logger
 
 
 # login view
@@ -80,30 +81,10 @@ class LogoutView(APIView):
 
     # noinspection PyMethodMayBeStatic
     def post(self, request):
-        auth_header = request.META.get("HTTP_AUTHORIZATION")
-
-        if not auth_header.startswith("Bearer "):
-            return returned_response(
-                "failed",
-                "Invalid token format",
-                status.HTTP_401_UNAUTHORIZED,
-            )
-
-        parts = auth_header.split()
-        if len(parts) != 2:
-            return returned_response(
-                "failed",
-                "Invalid token format.",
-                status.HTTP_401_UNAUTHORIZED,
-            )
-
-        token = parts[1]
         try:
-            # Decode and verify token
-            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-
-            # Extract jti
-            jti = payload.get("jti")
+            # Extract jti from request
+            jti = request.jti
+            logger.info(f"Jti from logout: {jti}")
             redis_service = RedisService()
             redis_service.set(jti, "blacklisted", expire=timedelta(days=1))
             return returned_response(
@@ -111,15 +92,10 @@ class LogoutView(APIView):
                 "Logout successful",
                 status.HTTP_200_OK,
             )
-        except jwt.ExpiredSignatureError:
+        except Exception as e:
+            logger.error(f"Logout failed: {str(e)}")
             return returned_response(
                 "failed",
-                "Token has expired",
-                status.HTTP_401_UNAUTHORIZED,
-            )
-        except jwt.InvalidTokenError as e:
-            return returned_response(
-                "failed",
-                f"Invalid token: {str(e)}",
-                status.HTTP_401_UNAUTHORIZED,
+                "Network Error",
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
