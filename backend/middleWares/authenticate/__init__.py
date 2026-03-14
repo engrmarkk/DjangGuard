@@ -117,6 +117,9 @@ class UserAgentValidationMiddleware:
                         {"message": "User is not active"},
                         status=status.HTTP_401_UNAUTHORIZED,
                     )
+                # save jti in request
+                request.jti = jti
+                logger.info(f"Jti saved in request: {jti}")
             except jwt.ExpiredSignatureError:
                 return JsonResponse(
                     {"message": "Token has expired"},
